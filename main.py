@@ -17,7 +17,7 @@ Function breakdown:
 """
 
 
-FILE = b"This is a completely random string that formats my files, apparently. How interesting."
+FILE = b"storweird"
 
 def pack(path):
     data = path.read_bytes() 
@@ -94,6 +94,7 @@ def collect_chunks(folders):
     return chunks
 
 def recompact(chunks):
+    """Recompact the chunks into a single thing, but does not touch them yet."""
     data = b""
 
     for chunk in chunks:
@@ -171,3 +172,16 @@ if __name__ == "__main__":
                 for chunk in folder.glob("chunk_*.bin"):
                     chunk.unlink()
             print("Old chunks cleared.")
+
+"""
+Ideas for next additions/features:
+- Store order for assembly in the chunk files themselves.
+- Support folders in sub folders to a certain depth.
+- Support for multiple files at once.
+- Add an odd form of encryption to the chunks, or encrypt then split, then encrypt again.
+- Add a little bit more error handling - this is kinda important maybe this should be at the top.
+- Make the files optionally hidden.
+- Allow generation of folders of a certain amount.
+    - Could have interesting naming schemes.
+- Store files in metadata of folders? Is it possible? 
+"""
