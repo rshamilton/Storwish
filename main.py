@@ -49,7 +49,7 @@ def get_them_folders(path):
 
     folders = [
       folder for folder in environment.iterdir()
-        if folder.is_dir()
+        if folder.is_dir() and not folder.name.startswith(".")
     ]
     return folders
 
@@ -87,9 +87,10 @@ def collect_chunks(folders):
     for folder in folders:
         chunks.extend(folder.glob("chunk_*.bin"))
 
-    # Sort numerically across all folders so chunk_2 comes before chunk_10
-    # and folder listing order doesn't matter
     chunks.sort(key=lambda c: int(c.stem.split("_")[1]))
+    numbers = [int(c.stem.split("_")[1]) for c in chunks]
+    if numbers != list(range(len(chunks))):
+        raise ValueError(f"Missing chunks (or duplicates?). Oh no! We did find these chunks though: {numbers}.")
 
     return chunks
 
@@ -113,6 +114,11 @@ def construct(folders, destination):
 
     return output_path
 
+def safe_construct(folders, dest):
+    try:
+        return construct(folders, dest)
+    except (ValueError, OSError) as e:
+        raise SystemExit(f"Couldn't rebuild: {e}")
 
 def ask_path(prompt, must_exist=True, want_dir=False):
     """Keep asking until the user gives a usable path."""
@@ -131,9 +137,9 @@ def ask_path(prompt, must_exist=True, want_dir=False):
             return path
 
 
-"""Actual code that runs. Finally."""
+"""Code that calls more code that calls more code once it is called."""
 
-if __name__ == "__main__":
+def main():
     while True:
         choice =  input("Split or reconstruct (s/r): ").strip().lower()
         if choice in ("s", "r"):
@@ -149,13 +155,16 @@ if __name__ == "__main__":
         if not folders:
             raise SystemExit("That folder has no sub-folders to distribute into.")
 
-        chunks = split_data(pack(src), len(folders))
-        distribute(chunks, folders)
+        try:
+            chunks = split_data(pack(src), len(folders))
+            distribute(chunks, folders)
+        except Exception as e:
+            raise SystemExit(f"ERROR SPLITTING: {e}")
         print(f"Saved {len(chunks)} chunk(s) across {len(folders)} folder(s).")
 
         if input("Rebuild the file now? (y/n): ").strip().lower() == "y":
             dest = ask_path("Folder to restore the file into: ", want_dir=True)
-            print("Rebuilt:", construct(folders, dest))
+            print("Rebuilt:", safe_construct(folders, dest))
 
     elif choice == "r":
         dest = ask_path("Folder to restore the file into: ", want_dir=True)
@@ -165,7 +174,7 @@ if __name__ == "__main__":
         if not folders:
             raise SystemExit("That folder has no sub-folders to collect from.")
 
-        print("Rebuilt:", construct(folders, dest))
+        print("Rebuilt:", safe_construct(folders, dest))
 
         if input("Would you like to clear the old chunks? (y/n): ").strip().lower() == "y":
             for folder in folders:
@@ -173,15 +182,20 @@ if __name__ == "__main__":
                     chunk.unlink()
             print("Old chunks cleared.")
 
+if __name__ == "__main__":
+    try:
+        main()
+    except (KeyboardInterrupt, EOFError):
+        print("\n):")
+
+
 """
 Ideas for next additions/features:
-- Store order for assembly in the chunk files themselves.
 - Support folders in sub folders to a certain depth.
 - Support for multiple files at once.
 - Add an odd form of encryption to the chunks, or encrypt then split, then encrypt again.
-- Add a little bit more error handling - this is kinda important maybe this should be at the top.
 - Make the files optionally hidden.
 - Allow generation of folders of a certain amount.
-    - Could have interesting naming schemes.
+- Could have interesting naming schemes.
 - Store files in metadata of folders? Is it possible? 
 """
