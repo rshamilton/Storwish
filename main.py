@@ -231,12 +231,3 @@ if __name__ == "__main__":
         main()
     except (KeyboardInterrupt, EOFError):
         print("\n):")
-
-
-"""
-Ideas for next additions/features:
-- Support folders in sub folders to a certain depth.
-- Support for multiple files at once.
-- Add an odd form of encryption to the chunks, or encrypt then split, then encrypt again.
-- Store files in metadata of folders? Is it possible? 
-"""
