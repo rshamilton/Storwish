@@ -189,7 +189,7 @@ def main():
 
     if choice == "s":
         src = ask_path("File to split: ")
-        storage = ask_path("Folder containing the sub-folders to store chunks in: ", want_dir=True)
+        storage = ask_path("Folder containing the sub-folders (which you choose to generate) to store chunks in: ", want_dir=True)
 
         hidden = input("Make the chunks & new folders hidden? (y/n): ").strip().lower() == "y"
         folders = get_them_folders(storage)
@@ -220,7 +220,7 @@ def main():
 
         print("Rebuilt:", safe_construct(folders, dest))
 
-        if input("Would you like to clear the old chunks? (y/n): ").strip().lower() == "y":
+        if input("Would you like to clear the old chunks (keeps the folders)? (y/n): ").strip().lower() == "y":
             for folder in folders:
                 for chunk in chunk_files(folder):
                     chunk.unlink()
