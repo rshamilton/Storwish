@@ -1,4 +1,4 @@
-import math, struct
+import math, struct, random, string
 from pathlib import Path
 
 """
@@ -8,12 +8,19 @@ Function breakdown:
 - pack: Packs a file into a binary format.
 - unpack: Unpacks a file from its binary representation.
 - save: Saves a file in a specified location.
-- get_them_folders: Gets the number of folders in a path.
+- chunk_files: Finds the chunk files in a folder, hidden or not.
+- get_them_folders: Gets a list of the folders in the specified path (hidden ones only if they hold chunks).
 - split_data: Splits the data into chunks.
-- distribute: Distributes the chunks across the folders.
-- collect_chunks: Collects the chunks from the folders.
+- distribute: Distributes the chunks across the folders, optionally hidden.
+- collect_chunks: Collects the chunks from the folders and checks none are missing.
 - recompact: Recompacts the chunks into a single data stream.
 - construct: Constructs the original file from the distributed chunks.
+- safe_construct: Calls construct but catches errors and exits with a short message.
+- ask_path: Asks the user for a path and validates it.
+- ask_foldgen: Asks the user how many folders to make and validates the number.
+- make_them_folders: Makes the requested number of sub-folders, optionally hidden.
+- folder_names: Generates names for the new folders.
+- main: Runs the program and handles user input.
 """
 
 
@@ -39,9 +46,13 @@ def unpack(it):
     return name, data
 
 def save(path, destination):
-    """Save it somewhere normally. Not really weird but helpful for testing and me learning."""
+    """Save it somewhere normally. Not really weird but helpful for testing and me learning. Not used in the actual program."""
     packed = pack(path)
     destination.write_bytes(packed)
+
+def chunk_files(folder):
+    """Find the actual chunk files in a folder, now even if hidden."""
+    return list(folder.glob("chunk_*.bin")) + list(folder.glob(".chunk_*.bin"))
 
 def get_them_folders(path):
     """Get the number of folders in a path."""
@@ -49,7 +60,7 @@ def get_them_folders(path):
 
     folders = [
       folder for folder in environment.iterdir()
-        if folder.is_dir() and not folder.name.startswith(".")
+        if folder.is_dir() and (not folder.name.startswith(".") or chunk_files(folder))
     ]
     return folders
 
@@ -66,7 +77,7 @@ def split_data(data, folders_available):
         chunks.append(chunk)
     return chunks
 
-def distribute(chunks, folders):
+def distribute(chunks, folders, hidden=False):
     """Distribute the chunks across the folders."""
     if len(chunks) > len(folders):
         raise ValueError("Not enough folders to distribute the chunks.")
@@ -74,7 +85,7 @@ def distribute(chunks, folders):
     saved_paths = []
 
     for i, (chunk,folder) in enumerate(zip(chunks, folders)):
-        chunk_path = folder / f"chunk_{i}.bin"
+        chunk_path = folder / f"{'.' if hidden else ''}chunk_{i}.bin"
         chunk_path.write_bytes(chunk)
         saved_paths.append(chunk_path)
 
@@ -85,7 +96,7 @@ def collect_chunks(folders):
     chunks = []
 
     for folder in folders:
-        chunks.extend(folder.glob("chunk_*.bin"))
+        chunks.extend(chunk_files(folder))
 
     chunks.sort(key=lambda c: int(c.stem.split("_")[1]))
     numbers = [int(c.stem.split("_")[1]) for c in chunks]
@@ -115,6 +126,7 @@ def construct(folders, destination):
     return output_path
 
 def safe_construct(folders, dest):
+    """Calls construct command but just catches errors if it does not work."""
     try:
         return construct(folders, dest)
     except (ValueError, OSError) as e:
@@ -136,10 +148,38 @@ def ask_path(prompt, must_exist=True, want_dir=False):
         else:
             return path
 
+def ask_foldgen(prompt, minimum=1, maximum=100):
+    """Ask for the number of folders and keep asking until a good number is given."""
+    while True:
+        raw = input(prompt).strip()
+        if raw.isdigit() and minimum <= int(raw) <= maximum:
+            return int(raw)
+        print ("Enter a number between 1 and 100. If you want more change the code.")
 
-"""Code that calls more code that calls more code once it is called."""
+def make_them_folders(storage, count, hidden=False):
+    """Make the sub-folders to store the chunks in inside the root storage folder."""
+    made = []
+    for name in folder_names(count):
+        folder = storage / (("." +name) if hidden else name)
+        folder.mkdir(exist_ok=True)
+        made.append(folder)
+    return made
+
+def folder_names(count):
+    """Generate random folder names."""
+    if random.random() < 0.5:
+        return [f"{chr(97 + i % 26)}{i // 26 or ''}" for i in range(count)]
+    else:
+        return [
+            "".join(random.choices(string.ascii_lowercase, k=8))
+            if random.choice([True, False])
+            else f"{random.randrange(0x100000000):08x}"
+            for _ in range(count)
+        ]
+    
 
 def main():
+    """Code that calls more code that calls more code once it is called."""
     while True:
         choice =  input("Split or reconstruct (s/r): ").strip().lower()
         if choice in ("s", "r"):
@@ -151,13 +191,17 @@ def main():
         src = ask_path("File to split: ")
         storage = ask_path("Folder containing the sub-folders to store chunks in: ", want_dir=True)
 
+        hidden = input("Make the chunks & new folders hidden? (y/n): ").strip().lower() == "y"
         folders = get_them_folders(storage)
         if not folders:
-            raise SystemExit("That folder has no sub-folders to distribute into.")
+            if input("No sub-folders found. Make some? (y/n): ").strip().lower() != "y":
+                raise SystemExit("No sub-folders to distribute into.")
+            folders =make_them_folders(storage, ask_foldgen("How many sub-folders to make? (1-100): "),hidden)
+
 
         try:
             chunks = split_data(pack(src), len(folders))
-            distribute(chunks, folders)
+            distribute(chunks, folders, hidden)
         except Exception as e:
             raise SystemExit(f"ERROR SPLITTING: {e}")
         print(f"Saved {len(chunks)} chunk(s) across {len(folders)} folder(s).")
@@ -178,7 +222,7 @@ def main():
 
         if input("Would you like to clear the old chunks? (y/n): ").strip().lower() == "y":
             for folder in folders:
-                for chunk in folder.glob("chunk_*.bin"):
+                for chunk in chunk_files(folder):
                     chunk.unlink()
             print("Old chunks cleared.")
 
@@ -194,8 +238,5 @@ Ideas for next additions/features:
 - Support folders in sub folders to a certain depth.
 - Support for multiple files at once.
 - Add an odd form of encryption to the chunks, or encrypt then split, then encrypt again.
-- Make the files optionally hidden.
-- Allow generation of folders of a certain amount.
-- Could have interesting naming schemes.
 - Store files in metadata of folders? Is it possible? 
 """
